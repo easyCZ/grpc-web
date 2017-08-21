@@ -40,6 +40,23 @@ function queryBooks() {
     },
     onEnd: (code: Code, msg: string, trailers: Metadata) => {
       console.log("queryBooks.onEnd", code, msg, trailers);
+    },
+    debugger: {
+      newRequest: (requestId: number, options: any): void => {
+        console.log(requestId, 'test');
+      },
+      onHeaders(requestId: number, headers: Metadata, status: number): void {
+        console.log(requestId, headers, status);
+      },
+      onChunk(requestId: number, metadata: Metadata): void {
+        console.log(requestId, metadata);
+      },
+      onEnd(requestId: number, grpcStatus: Code | null, message: string[]): void {
+        console.log(requestId, grpcStatus, message);
+      },
+      onError(requestId: number, message: string): void {
+        console.log(requestId, message);
+      }
     }
   });
 }
