@@ -5,5 +5,6 @@ export {
   Code,
   Transport,
   TransportOptions,
-  useDebugger,
+  GrpcDebugger,
+  ConsoleDebugger,
 } from "./grpc";

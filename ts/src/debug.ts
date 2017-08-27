@@ -1,60 +1,97 @@
-import {TransportOptions} from "./transports/Transport";
 import {BrowserHeaders as Metadata} from "browser-headers";
 import {Code} from "./Code";
 import {Message} from 'google-protobuf';
+import { grpc } from './grpc';
 
 
-let requestId = 0;
+export type MethodDefinition = grpc.MethodDefinition<Message, Message>;
 
 
-export interface GrpcDebugger<TRequest extends Message> {
-  new (request: TRequest): GrpcDebugger<TRequest>;
 
-  onHeaders(headers: Metadata, status: number): void;
-  onChunk(metdata: Metadata): void;
-  onEnd(grpcStatus: Code | null, message: string[]): void;
-  onError(message: string): void;
+export interface RequestDebugger {
+    onHeaders(id: number, headers: Metadata, status: number): void;
+    onMessage(id: number, payload: Message): void;
+    onTrailers(id: number, payload: Metadata): void;
+    onChunk(id: number, metdata: Metadata): void;
+    onEnd(id: number, grpcStatus: Code | null, message: string): void;
+    onError(id: number, code: Code, err: Error): void;
+}
+
+export interface GrpcDebugger {
+
+    request(id: number, host: string, method: MethodDefinition, metadata: Metadata): RequestDebugger;
+
 }
 
 
-export class ConsoleDebugger<TRequest extends Message> implements GrpcDebugger<TRequest> {
+// export interface GrpcDebugger {
+//     request(id: number, host: string, method: MethodDefinition, metadata: Metadata.ConstructorArg, req: Message): void;
+//
+// }
 
-  // public readonly requestId: number;
-  // private readonly request: TRequest;
 
-  constructor(request: TRequest) {
-    // this.requestId = requestId++;
-    // this.request = request;
-  }
 
-  newRequest(requestId: number, options: TransportOptions): void {
-    debug(requestId, options);
-  }
-  onHeaders(headers: Metadata, status: number): void {
-    debug(headers, status);
-  }
-  onChunk(metadata: Metadata): void {
-    debug(metadata);
-  }
-  onEnd(grpcStatus: Code | null, message: string[]): void {
-    debug(grpcStatus, message);
-  }
-  onError(message: string): void {
-    debug(message);
-  }
-
+type Request = {
+    id: number,
+    host: string,
+    method: MethodDefinition,
+    payload: Message,
+    messages: Message[],
+    headers: Metadata | null,
+    trailers: Metadata | null,
+    status: Code | null,
 }
 
-let registeredDebuggers: GrpcDebugger[] = [];
+export class ConsoleDebugger implements GrpcDebugger {
 
-export function useDebugger(...debuggers: GrpcDebugger[]): void {
-  registeredDebuggers = debuggers;
+    private requests: { [id: number]: Request} = {};
+
+    request(id: number, host: string, method: MethodDefinition, metadata: Metadata.ConstructorArg, message: Message): void {
+        const req: Request = {
+            id,
+            host,
+            method,
+            payload: message,
+            messages: [],
+            headers: null,
+            trailers: null,
+            status: null,
+        }
+        this.requests[id] = req;
+        debug('GRPC Request', host, metadata, req, method);
+    }
+
+    onMessage(id: number, message: Message): void {
+        this.requests[id].messages.push(message);
+        debug(message)
+    }
+
+    onTrailers(id: number, payload: Metadata): void {
+        this.requests[id].trailers = payload;
+        debug(payload)
+    }
+
+    onHeaders(id: number, headers: Metadata, status: number): void {
+        this.requests[id].headers = headers;
+        debug(id, headers, status);
+    }
+
+    onChunk(id: number, metadata: Metadata): void {
+        debug(id, metadata);
+    }
+
+    onEnd(id: number, grpcStatus: Code | null, message: string): void {
+        this.requests[id].status = grpcStatus;
+        debug(grpcStatus, message);
+
+        console.log(this.requests[id])
+    }
+
+    onError(id: number, code: Code, err: Error): void {
+        debug(id, err, code);
+    }
+
 }
-
-export function getDebuggers(): GrpcDebugger[] {
-  return registeredDebuggers;
-}
-
 
 export function debug(...args: any[]) {
   if (console.debug) {
