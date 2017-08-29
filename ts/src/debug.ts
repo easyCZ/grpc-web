@@ -36,7 +36,7 @@ export class ConsoleRequestDebugger implements RequestDebugger {
         error: Error | null,
     };
 
-    readonly logTitle: string;
+    private readonly logTitle: string;
 
     constructor(id: number, host: string, method: MethodDefinition, metadata: Metadata.ConstructorArg, message: Message) {
         this.id = id;
@@ -53,12 +53,12 @@ export class ConsoleRequestDebugger implements RequestDebugger {
 
         this.logTitle = `GRPC #${id}:`;
 
-        debug(`${this.logTitle} Request to $\{method.service.serviceName}.$\{method.methodName}`, host, metadata, message);
+        debug(`${this.logTitle} Request to ${method.service.serviceName}.${method.methodName}`, host, metadata, message);
     }
 
     onMessage(message: Message): void {
         this.response.messages.push(message);
-        debug(`${this.logTitle} Message`, message);
+        debug(`${this.logTitle} Message`, message.toObject(), message);
     }
 
     onTrailers(trailers: Metadata): void {
@@ -77,7 +77,8 @@ export class ConsoleRequestDebugger implements RequestDebugger {
 
     onEnd(grpcStatus: Code | null): void {
         this.response.status = grpcStatus;
-        debug(`${this.logTitle} End`, grpcStatus, this.response.messages, this.response.headers, this.response.trailers);
+        const jsonMessages = this.response.messages.map(message => message.toObject());
+        debug(`${this.logTitle} End`, grpcStatus, jsonMessages, this.response.headers, this.response.trailers);
     }
 
     onError(code: Code, err: Error): void {
