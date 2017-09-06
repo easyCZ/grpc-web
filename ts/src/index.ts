@@ -6,7 +6,7 @@ export {
   Code,
   Transport,
   TransportOptions,
-  GrpcDebugger,
+  Debugger,
   ConsoleDebugger,
   RequestDebugger,
   MethodDefinition
