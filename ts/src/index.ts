@@ -7,4 +7,6 @@ export {
   TransportOptions,
   GrpcDebugger,
   ConsoleDebugger,
+    RequestDebugger,
+    MethodDefinition
 } from "./grpc";

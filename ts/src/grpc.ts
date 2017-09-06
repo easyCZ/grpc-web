@@ -2,7 +2,7 @@ import * as jspb from "google-protobuf";
 import {BrowserHeaders as Metadata} from "browser-headers";
 import {ChunkParser, Chunk, ChunkType} from "./ChunkParser";
 import {Transport, TransportOptions, DefaultTransportFactory} from "./transports/Transport";
-import {GrpcDebugger, ConsoleDebugger} from "./debug";
+import {GrpcDebugger, RequestDebugger, MethodDefinition, ConsoleDebugger} from "./debug";
 import detach from "./detach";
 import {Code} from "./Code";
 
@@ -13,6 +13,8 @@ export {
   Code,
   GrpcDebugger,
   ConsoleDebugger,
+    RequestDebugger,
+    MethodDefinition,
 };
 
 export namespace grpc {

@@ -5,7 +5,11 @@ import {QueryBooksRequest, Book, GetBookRequest} from "../_proto/examplecom/libr
 declare const USE_TLS: boolean;
 const host = USE_TLS ? "https://localhost:9091" : "http://localhost:9090";
 
-grpc.setDebugger(new ConsoleDebugger());
+const grpcDebugger = (window as any).__GRPC_WEB_DEVTOOLS__
+  ? (window as any).__GRPC_WEB_DEVTOOLS__
+  : new ConsoleDebugger();
+
+grpc.setDebugger(grpcDebugger);
 
 function getBook() {
   const getBookRequest = new GetBookRequest();

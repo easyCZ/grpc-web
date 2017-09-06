@@ -5,6 +5,11 @@ import { grpc } from './grpc';
 
 
 export type MethodDefinition = grpc.MethodDefinition<Message, Message>;
+export {
+    Metadata,
+    Message,
+    Code
+}
 
 export interface RequestDebugger {
     onHeaders(headers: Metadata): void;
