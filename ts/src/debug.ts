@@ -3,13 +3,12 @@ import {Code} from "./Code";
 import {Message} from 'google-protobuf';
 import { grpc } from './grpc';
 
-
-export type MethodDefinition = grpc.MethodDefinition<Message, Message>;
 export {
     Metadata,
     Message,
     Code
 }
+export type MethodDefinition = grpc.MethodDefinition<Message, Message>;
 
 export interface RequestDebugger {
     onHeaders(headers: Metadata): void;
@@ -20,7 +19,7 @@ export interface RequestDebugger {
     onError(code: Code, err: Error): void;
 }
 
-export interface GrpcDebugger {
+export interface Debugger {
     request(id: number, host: string, method: MethodDefinition, metadata: Metadata, message: Message): RequestDebugger;
 }
 
@@ -93,23 +92,10 @@ export class ConsoleRequestDebugger implements RequestDebugger {
     }
 }
 
-export class ConsoleDebugger implements GrpcDebugger {
-
-    private requests: { [id: number]: RequestDebugger} = {};
+export class ConsoleDebugger implements Debugger {
 
     request(id: number, host: string, method: MethodDefinition, metadata: Metadata.ConstructorArg, message: Message): RequestDebugger {
-        const requestDebugger = new ConsoleRequestDebugger(id, host, method, metadata, message);
-        this.addRequest(id, requestDebugger);
-
-        return requestDebugger;
-    }
-
-    getRequests(): { [id: number]: RequestDebugger} {
-        return this.requests;
-    }
-
-    private addRequest(id: number, request: RequestDebugger): void {
-        this.requests[id] = request;
+        return new ConsoleRequestDebugger(id, host, method, metadata, message);
     }
 
 }

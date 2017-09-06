@@ -1,3 +1,4 @@
+
 export {
   grpc,
   Metadata as BrowserHeaders,
@@ -7,6 +8,6 @@ export {
   TransportOptions,
   GrpcDebugger,
   ConsoleDebugger,
-    RequestDebugger,
-    MethodDefinition
+  RequestDebugger,
+  MethodDefinition
 } from "./grpc";

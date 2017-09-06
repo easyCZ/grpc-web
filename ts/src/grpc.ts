@@ -2,7 +2,7 @@ import * as jspb from "google-protobuf";
 import {BrowserHeaders as Metadata} from "browser-headers";
 import {ChunkParser, Chunk, ChunkType} from "./ChunkParser";
 import {Transport, TransportOptions, DefaultTransportFactory} from "./transports/Transport";
-import {GrpcDebugger, RequestDebugger, MethodDefinition, ConsoleDebugger} from "./debug";
+import {Debugger, RequestDebugger, MethodDefinition, ConsoleDebugger} from "./debug";
 import detach from "./detach";
 import {Code} from "./Code";
 
@@ -11,11 +11,12 @@ export {
   Transport,
   TransportOptions,
   Code,
-  GrpcDebugger,
+  Debugger,
   ConsoleDebugger,
-    RequestDebugger,
-    MethodDefinition,
+  RequestDebugger,
+  MethodDefinition,
 };
+
 
 export namespace grpc {
 
@@ -159,10 +160,10 @@ export namespace grpc {
   }
 
 
-  let grpcDebugger: GrpcDebugger = new ConsoleDebugger();
+  let dbugger: Debugger = new ConsoleDebugger();
 
-  export function setDebugger(dbg: GrpcDebugger): void {
-    grpcDebugger = dbg;
+  export function setDebugger(dbg: Debugger): void {
+    dbugger = dbg;
   }
 
   let sequenceNumber = 1;
@@ -223,7 +224,7 @@ export namespace grpc {
       transport = DefaultTransportFactory.getTransport();
     }
 
-    const dbg = grpcDebugger;
+    const dbg = dbugger;
     const debuggerEnabled = props.debug && dbg;
 
     const id = sequenceNumber++;
