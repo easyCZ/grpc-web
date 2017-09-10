@@ -1,15 +1,12 @@
-import {grpc, Code, Metadata, ConsoleDebugger } from "grpc-web-client";
+import {grpc, Code, Metadata, ConsoleDebuggerProvider } from "grpc-web-client";
 import {BookService} from "../_proto/examplecom/library/book_service_pb_service";
 import {QueryBooksRequest, Book, GetBookRequest} from "../_proto/examplecom/library/book_service_pb";
 
 declare const USE_TLS: boolean;
 const host = USE_TLS ? "https://localhost:9091" : "http://localhost:9090";
 
-const grpcDebugger = (window as any).__GRPC_WEB_DEVTOOLS__
-  ? (window as any).__GRPC_WEB_DEVTOOLS__
-  : new ConsoleDebugger();
-
-grpc.setDebugger(grpcDebugger);
+grpc.registerDebugger(new ConsoleDebuggerProvider());
+(window as any).__GRPC_WEB_DEVTOOLS__ ? grpc.registerDebugger((window as any).__GRPC_WEB_DEVTOOLS__): void 0;
 
 function getBook() {
   const getBookRequest = new GetBookRequest();
