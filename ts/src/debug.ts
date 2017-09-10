@@ -144,7 +144,7 @@ export class DebuggerDispatch implements Debugger {
 
     onResponseMessage(payload: Message): void {
         this.debuggers.forEach(dbg => {
-            detach(() => dbg.onRequestMessage(payload));
+            detach(() => dbg.onResponseMessage(payload));
         });
     }
 

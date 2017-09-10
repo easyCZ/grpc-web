@@ -17,18 +17,18 @@ function getBook() {
     host: host,
     onEnd: res => {
       const { status, statusMessage, headers, message, trailers } = res;
-      console.log("getBook.onEnd.status", status, statusMessage);
-      console.log("getBook.onEnd.headers", headers);
-      if (status === Code.OK && message) {
-        console.log("getBook.onEnd.message", message.toObject());
-      }
-      console.log("getBook.onEnd.trailers", trailers);
-      queryBooks();
+      // console.log("getBook.onEnd.status", status, statusMessage);
+      // console.log("getBook.onEnd.headers", headers);
+      // if (status === Code.OK && message) {
+      //   console.log("getBook.onEnd.message", message.toObject());
+      // }
+      // console.log("getBook.onEnd.trailers", trailers);
+      // queryBooks();
     }
   });
 }
 
-getBook();
+// getBook();
 
 function queryBooks() {
   const queryBooksRequest = new QueryBooksRequest();
@@ -38,20 +38,27 @@ function queryBooks() {
     request: queryBooksRequest,
     host: host,
     onHeaders: (headers: Metadata) => {
-      console.log("queryBooks.onHeaders", headers);
+      // console.log("queryBooks.onHeaders", headers);
     },
     onMessage: (message: Book) => {
-      console.log("queryBooks.onMessage", message.toObject());
+      // console.log("queryBooks.onMessage", message.toObject());
     },
     onEnd: (code: Code, msg: string, trailers: Metadata) => {
-      console.log("queryBooks.onEnd", code, msg, trailers);
+      // console.log("queryBooks.onEnd", code, msg, trailers);
     }
   });
 }
 
-const button = document.getElementById('fetch');
-if (button) {
-    button.onclick = (event) => {
+const getBookButton = document.getElementById('getBook');
+if (getBookButton) {
+    getBookButton.onclick = (event) => {
         getBook();
+    }
+}
+
+const queryBooksButton = document.getElementById('queryBooks');
+if (queryBooksButton) {
+    queryBooksButton.onclick = (event) => {
+        queryBooks();
     }
 }
