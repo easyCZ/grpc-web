@@ -2,7 +2,7 @@ import * as jspb from "google-protobuf";
 import {BrowserHeaders as Metadata} from "browser-headers";
 import {ChunkParser, Chunk, ChunkType} from "./ChunkParser";
 import {Transport, TransportOptions, DefaultTransportFactory} from "./transports/Transport";
-import {Debugger, RequestDebugger, MethodDefinition, ConsoleDebugger} from "./debug";
+import {DebuggerProvider, DebuggerDispatch} from "./debug";
 import detach from "./detach";
 import {Code} from "./Code";
 
@@ -10,15 +10,13 @@ export {
   Metadata,
   Transport,
   TransportOptions,
-  Code,
-  Debugger,
-  ConsoleDebugger,
-  RequestDebugger,
-  MethodDefinition,
+  Code
 };
 
 
 export namespace grpc {
+
+  let sequenceNumber = 1;
 
   export interface ProtobufMessageClass<T extends jspb.Message> {
     new(): T;
@@ -104,7 +102,24 @@ export namespace grpc {
     onEnd: (output: UnaryOutput<TResponse>) => void,
     transport?: Transport,
     debug?: boolean,
-    // debugger?: GrpcDebugger,
+  }
+
+  const debuggerProviders: DebuggerProvider[] = [];
+
+  export function registerDebugger(dbg: DebuggerProvider): void {
+    debuggerProviders.push(dbg);
+  }
+
+  export function removeDebugger(dbg: DebuggerProvider): boolean {
+    const index = debuggerProviders.indexOf(dbg);
+    if (index < 0) return false;
+
+    debuggerProviders.splice(index, 1);
+    return true;
+  }
+
+  export function getDebuggers(): DebuggerProvider[] {
+    return debuggerProviders;
   }
 
   function frameRequest(request: jspb.Message): ArrayBufferView {
@@ -158,15 +173,6 @@ export namespace grpc {
     };
     grpc.invoke(methodDescriptor, rpcOpts);
   }
-
-
-  let dbugger: Debugger = new ConsoleDebugger();
-
-  export function setDebugger(dbg: Debugger): void {
-    dbugger = dbg;
-  }
-
-  let sequenceNumber = 1;
 
   export function invoke<
       TRequest extends jspb.Message,
@@ -224,13 +230,11 @@ export namespace grpc {
       transport = DefaultTransportFactory.getTransport();
     }
 
-    const dbg = dbugger;
-    const debuggerEnabled = props.debug && dbg;
-
     const id = sequenceNumber++;
-    const url = `${props.host}/${methodDescriptor.service.serviceName}/${methodDescriptor.methodName}`;
+    const debuggers = getDebuggers().map(dbg => dbg.getInstanceForRequest(id));
+    const debuggerDispatch = new DebuggerDispatch(debuggers);
 
-    const requestDebugger = dbg.request(id, url, methodDescriptor, requestHeaders, props.request)
+    const url = `${props.host}/${methodDescriptor.service.serviceName}/${methodDescriptor.methodName}`;
 
     const transportOptions: TransportOptions = {
       debug: !!props.debug,
@@ -238,18 +242,15 @@ export namespace grpc {
       headers: requestHeaders,
       body: framedRequest,
       onHeaders: (headers: Metadata, status: number) => {
-        detach(() => debuggerEnabled && requestDebugger.onHeaders(headers));
+        detach(() => debuggerDispatch.onRequestHeaders(headers));
 
-        // props.debug && debug("onHeaders", headers, status);
         if (status === 0) {
           // The request has failed due to connectivity issues. Do not capture the headers
         } else {
           responseHeaders = headers;
-          // props.debug && debug("onHeaders.responseHeaders", JSON.stringify(responseHeaders, null, 2));
           const code = httpStatusToCode(status);
-          // props.debug && debug("onHeaders.code", code);
           const gRPCMessage = headers.get("grpc-message") || [];
-          // props.debug && debug("onHeaders.gRPCMessage", gRPCMessage);
+
           if (code !== Code.OK) {
             rawOnError(code, gRPCMessage[0]);
             return;
@@ -262,9 +263,10 @@ export namespace grpc {
         let data: Chunk[] = [];
         try {
           data = parser.parse(chunkBytes);
+          detach(() => debuggerDispatch.onResponseChunk(data, chunkBytes));
         } catch (e) {
-          detach(() => debuggerEnabled && requestDebugger.onError(Code.Internal, e));
-          // props.debug && debug("onChunk.parsing error", e, e.message);
+          detach(() => debuggerDispatch.onError(Code.Internal, e));
+
           rawOnError(Code.Internal, `parsing error: ${e.message}`);
           return;
         }
@@ -272,24 +274,23 @@ export namespace grpc {
         data.forEach((d: Chunk) => {
           if (d.chunkType === ChunkType.MESSAGE) {
             const deserialized = methodDescriptor.responseType.deserializeBinary(d.data!);
-            detach(() => debuggerEnabled && requestDebugger.onMessage(deserialized));
+            detach(() => debuggerDispatch.onResponseMessage(deserialized));
 
             rawOnMessage(deserialized);
           } else if (d.chunkType === ChunkType.TRAILERS) {
             responseTrailers = new Metadata(d.trailers);
-              detach(() => debuggerEnabled && requestDebugger.onTrailers(responseTrailers));
-            // props.debug && debug("onChunk.trailers", responseTrailers);
+            detach(() => debuggerDispatch.onResponseTrailers(responseTrailers));
           }
         });
       },
       onEnd: () => {
-        // props.debug && debug("grpc.onEnd");
-
         if (responseTrailers === undefined) {
           if (responseHeaders === undefined) {
-              detach(() => debuggerEnabled && requestDebugger.onError(Code.Internal, new Error("Response closed without headers")));
+            const errorMessage = "Response closed without headers";
+            detach(() => debuggerDispatch.onError(Code.Internal, new Error(errorMessage)));
+
             // The request was unsuccessful - it did not receive any headers
-            rawOnError(Code.Internal, "Response closed without headers");
+            rawOnError(Code.Internal, errorMessage);
             return;
           }
 
@@ -299,13 +300,14 @@ export namespace grpc {
           // This was a headers/trailers-only response
           // props.debug && debug("grpc.headers only response ", grpcStatus, grpcMessage);
           if (grpcStatus === null) {
-              detach(() => debuggerEnabled && requestDebugger.onError(Code.Internal, new Error("Response closed without grpc-status (Headers only)")));
-            rawOnEnd(Code.Internal, "Response closed without grpc-status (Headers only)", responseHeaders);
+            const errorMessage = "Response closed without grpc-status (Headers only)";
+            detach(() => debuggerDispatch.onError(Code.Internal, new Error(errorMessage)));
+            rawOnEnd(Code.Internal, errorMessage, responseHeaders);
             return;
           }
 
           // Return an empty trailers instance
-            detach(() => debuggerEnabled && requestDebugger.onEnd(grpcStatus));
+          detach(() => debuggerDispatch.onResponseEnd(grpcStatus));
           rawOnEnd(grpcStatus, grpcMessage[0], responseHeaders);
           return;
         }
@@ -313,18 +315,20 @@ export namespace grpc {
         // There were trailers - get the status from them
         const grpcStatus = getStatusFromHeaders(responseTrailers);
         if (grpcStatus === null) {
-            detach(() => debuggerEnabled && requestDebugger.onError(Code.Internal, new Error("Response closed without grpc-status (Trailers provided)")));
-          rawOnError(Code.Internal, "Response closed without grpc-status (Trailers provided)");
+          const errorMessage = "Response closed without grpc-status (Trailers provided)";
+
+          detach(() => debuggerDispatch.onError(Code.Internal, new Error(errorMessage)));
+          rawOnError(Code.Internal, errorMessage);
           return;
         }
 
         const grpcMessage = responseTrailers.get("grpc-message");
-        detach(() => debuggerEnabled && requestDebugger.onEnd(grpcStatus));
+        detach(() => debuggerDispatch.onResponseEnd(grpcStatus));
         rawOnEnd(grpcStatus, grpcMessage[0], responseTrailers);
       }
     };
 
-    detach(() => debuggerEnabled && dbg.request(id, url, methodDescriptor, requestHeaders, props.request));
+    detach(() => debuggerDispatch.onRequestStart(props.host, methodDescriptor));
     transport(transportOptions);
   }
 }

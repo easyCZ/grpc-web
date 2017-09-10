@@ -6,8 +6,11 @@ export {
   Code,
   Transport,
   TransportOptions,
+} from "./grpc";
+
+export {
+  DebuggerProvider,
   Debugger,
   ConsoleDebugger,
-  RequestDebugger,
-  MethodDefinition
-} from "./grpc";
+  ConsoleDebuggerProvider,
+} from './debug';

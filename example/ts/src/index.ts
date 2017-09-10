@@ -51,3 +51,10 @@ function queryBooks() {
     }
   });
 }
+
+const button = document.getElementById('fetch');
+if (button) {
+    button.onclick = (event) => {
+        getBook();
+    }
+}

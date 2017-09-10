@@ -1,101 +1,169 @@
-import {BrowserHeaders as Metadata} from "browser-headers";
+import {BrowserHeaders} from "browser-headers";
 import {Code} from "./Code";
 import {Message} from 'google-protobuf';
 import { grpc } from './grpc';
+import {Chunk} from "./ChunkParser";
+import detach from "./detach";
 
 export {
-    Metadata,
+    BrowserHeaders,
     Message,
-    Code
 }
+
 export type MethodDefinition = grpc.MethodDefinition<Message, Message>;
 
-export interface RequestDebugger {
-    onHeaders(headers: Metadata): void;
-    onMessage(payload: Message): void;
-    onTrailers(metadata: Metadata): void;
-    onChunk(metadata: Metadata): void;
-    onEnd(grpcStatus: Code | null): void;
+export interface DebuggerProvider {
+    // Obtain an instance of a debugger.
+    // A convenience proxy allowing the provider to implement additional functionality
+    // such as tracking history of requests
+    getInstanceForRequest(id: number): Debugger;
+}
+
+// Implements callbacks for grpc-web request/response lifecycle events
+export interface Debugger {
+    // Called just before a request is fired, called only once
+    onRequestStart(host: string, method: MethodDefinition): void;
+
+    // Called just before a request is fired, called only once
+    onRequestHeaders(headers: BrowserHeaders): void;
+
+    // Called with the request payload, potentially called multiple times with request streams
+    onRequestMessage(payload: Message): void;
+
+    // Called when response headers are available, called once multiple times
+    // This is a low level method intended to debug byte serialization
+    onResponseHeaders(headers: BrowserHeaders, httpStatus: number): void;
+
+    // Called with each received chunk
+    onResponseChunk?(chunk: Chunk[], chunkBytes: Uint8Array): void;
+
+    // Called with each response message, called multiple times with response streams
+    onResponseMessage(payload: Message): void;
+
+    // Called with response trailers, called once
+    onResponseTrailers(metadata: BrowserHeaders): void;
+
+    // Called when a request completes, called once
+    onResponseEnd(grpcStatus: Code | null): void;
+
+    // Called with any error occuring in the flow, potentially called multiple times
     onError(code: Code, err: Error): void;
 }
 
-export interface Debugger {
-    request(id: number, host: string, method: MethodDefinition, metadata: Metadata, message: Message): RequestDebugger;
+
+export class ConsoleDebuggerProvider implements DebuggerProvider {
+
+    getInstanceForRequest(id: number): Debugger {
+        return new ConsoleDebugger(id);
+    }
+
 }
 
-export class ConsoleRequestDebugger implements RequestDebugger {
-
-    readonly id: number;
-    readonly host: string;
-    readonly method: MethodDefinition;
-    readonly request: {
-        metadata: Metadata.ConstructorArg,
-        message: Message,
-    };
-    response: {
-        messages: Message[],
-        headers: Metadata | null,
-        trailers: Metadata | null,
-        status: Code | null,
-        error: Error | null,
-    };
-
-    private readonly logTitle: string;
-
-    constructor(id: number, host: string, method: MethodDefinition, metadata: Metadata.ConstructorArg, message: Message) {
-        this.id = id;
-        this.host = host;
-        this.method = method;
-        this.request = { metadata, message };
-        this.response = {
-            messages: [],
-            headers: null,
-            trailers: null,
-            status: null,
-            error: null,
-        };
-
-        this.logTitle = `GRPC #${id}:`;
-
-        debug(`${this.logTitle} Request to ${method.service.serviceName}.${method.methodName}`, host, metadata, message);
-    }
-
-    onMessage(message: Message): void {
-        this.response.messages.push(message);
-        debug(`${this.logTitle} Message`, message.toObject(), message);
-    }
-
-    onTrailers(trailers: Metadata): void {
-        this.response.trailers = trailers;
-        debug(`${this.logTitle} Trailers`, trailers)
-    }
-
-    onHeaders(headers: Metadata): void {
-        this.response.headers = headers;
-        debug(`${this.logTitle} Headers`, headers);
-    }
-
-    onChunk(metadata: Metadata): void {
-        debug(`${this.logTitle} Chunk`, metadata);
-    }
-
-    onEnd(grpcStatus: Code | null): void {
-        this.response.status = grpcStatus;
-        const jsonMessages = this.response.messages.map(message => message.toObject());
-        debug(`${this.logTitle} End`, grpcStatus, jsonMessages, this.response.headers, this.response.trailers);
-    }
-
-    onError(code: Code, err: Error): void {
-        this.response.status = code;
-        this.response.error = err;
-        debug(`${this.logTitle} Error`, code, err);
-    }
-}
 
 export class ConsoleDebugger implements Debugger {
 
-    request(id: number, host: string, method: MethodDefinition, metadata: Metadata.ConstructorArg, message: Message): RequestDebugger {
-        return new ConsoleRequestDebugger(id, host, method, metadata, message);
+    readonly id: number;
+    host: string;
+    method: MethodDefinition;
+
+    constructor(id: number) {
+        this.id = id;
+    }
+
+    onRequestStart(host: string, method: MethodDefinition): void {
+        debug(`gRPC-Web #${this.id}: Making request to ${host} for ${method.service.serviceName}.${method.methodName}`, method);
+    }
+
+    onRequestHeaders(headers: BrowserHeaders): void {
+        debug(`gRPC-Web #${this.id}: Headers:`, headers);
+    }
+
+    onRequestMessage(payload: Message): void {
+        debug(`gRPC-Web #${this.id}: Request message:`, payload.toObject());
+    }
+
+    onResponseHeaders(headers: BrowserHeaders, httpStatus: number) {
+        debug(`gRPC-Web #${this.id}: Response headers:`, headers, 'HTTP Status:', httpStatus);
+    }
+
+    onResponseMessage(payload: Message): void {
+        debug(`gRPC-Web #${this.id}: Response message:`, payload.toObject());
+    }
+
+    onResponseTrailers(metadata: BrowserHeaders): void {
+        debug(`gRPC-Web #${this.id}: Response trailers:`, metadata);
+    }
+
+    onResponseEnd(grpcStatus: Code | any): void {
+        debug(`gRPC-Web #${this.id}: Finished with status:`, grpcStatus);
+    }
+
+    onError(code: Code, err: Error): void {
+        debug(`gRPC-Web #${this.id}: Error. Code:`, code, 'Error:', err);
+    }
+
+}
+
+export class DebuggerDispatch implements Debugger {
+
+    private readonly debuggers: Debugger[];
+
+    constructor(debuggers: Debugger[]) {
+        this.debuggers = debuggers;
+    }
+
+    onRequestStart(host: string, method: MethodDefinition): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onRequestStart(host, method));
+        });
+    }
+
+    onRequestHeaders(headers: BrowserHeaders): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onRequestHeaders(headers));
+        });
+    }
+
+    onRequestMessage(payload: Message): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onRequestMessage(payload));
+        });
+    }
+
+    onResponseHeaders(headers: BrowserHeaders, httpStatus: number): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onResponseHeaders(headers, httpStatus));
+        });
+    }
+
+    onResponseChunk(chunk: Chunk[], chunkBytes: Uint8Array) {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onResponseChunk && dbg.onResponseChunk(chunk, chunkBytes));
+        });
+    }
+
+    onResponseMessage(payload: Message): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onRequestMessage(payload));
+        });
+    }
+
+    onResponseTrailers(metadata: BrowserHeaders): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onResponseTrailers(metadata));
+        });
+    }
+
+    onResponseEnd(grpcStatus: Code | null): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onResponseEnd(grpcStatus));
+        });
+    }
+
+    onError(code: Code, err: Error): void {
+        this.debuggers.forEach(dbg => {
+            detach(() => dbg.onError(code, err));
+        });
     }
 
 }
