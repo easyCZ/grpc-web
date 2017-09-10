@@ -1,3 +1,4 @@
+import { grpc } from './grpc';
 
 export {
   grpc,
@@ -14,3 +15,8 @@ export {
   ConsoleDebugger,
   ConsoleDebuggerProvider,
 } from './debug';
+
+// Export to window in browsers
+if (window) {
+  (window as any).grpc = grpc;
+}
